@@ -940,16 +940,30 @@ const Index = () => {
   }, [beamsWithLoads, getBeamReleaseState]);
 
 
-  // 3D frame results for comparison — MUST use same params as runAnalysis
-  // محرك 3D Legacy: لا يتأثر بالتحديد اليدوي للجسور الحاملة/المحمولة → autoDetectedConnections
+  // 3D frame results for comparison — MUST be identical to what runAnalysis()
+  // produces for `legacy_3d`. Both `runAnalysis` (line ~631) and this hook used to
+  // call `getFrameResults3D` but with DIFFERENT `connections` arguments
+  // (runAnalysis used [] = conns3DLegacy, here used `autoDetectedConnections`),
+  // which made the "Frames Table" in the main analysis tab show different
+  // moments than the "ETABS Comparison" tab and the "Bridge Internal Forces
+  // Comparison" table for the very same 3D Legacy engine.
+  //
+  // Source-of-truth rule: the 3D Legacy engine NEVER uses beam-on-beam
+  // connections (تم إلغاء تمييز الجسور الحاملة في 3D Legacy). So we pass `[]`
+  // here too, ensuring all three tables read identical 3D Legacy results.
+  // When `selectedEngine === 'legacy_3d'` we additionally reuse the already
+  // computed `frameResults` to avoid recomputation and guarantee bit-exact
+  // equality across the UI.
   const frameResults3DRaw = useMemo(() => {
     if (!analyzed || frames.length === 0) return [] as FrameResult[];
+    if (selectedEngine === 'legacy_3d') return frameResults;
     try {
-      return getFrameResults3D(frames, beamsWithLoads, columns, mat, frameEndReleases, autoDetectedConnections, slabs, slabProps, false, beamStiffnessFactor, colStiffnessFactor);
+      const conns3DLegacy: BeamOnBeamConnection[] = [];
+      return getFrameResults3D(frames, beamsWithLoads, columns, mat, frameEndReleases, conns3DLegacy, slabs, slabProps, false, beamStiffnessFactor, colStiffnessFactor);
     } catch {
       return [] as FrameResult[];
     }
-  }, [analyzed, frames, beamsWithLoads, columns, mat, frameEndReleases, autoDetectedConnections, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor]);
+  }, [analyzed, selectedEngine, frameResults, frames, beamsWithLoads, columns, mat, frameEndReleases, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor]);
 
   // Global Frame results for comparison
   const frameResultsGF = useMemo(() => {
