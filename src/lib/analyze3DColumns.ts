@@ -984,14 +984,14 @@ export function getFrameResults3D(
       const rel = beamReleaseLookup.get(beamId);
       let Mleft  = finalEnv?.momentZI  ?? 0;
       let Mright = finalEnv?.momentZJ  ?? 0;
-      if (rel) {
+      if (rel && enforceReleasedZeros) {
         if (rel.relI_mz) Mleft  = 0;
         if (rel.relJ_mz) Mright = 0;
       }
 
-      // Also zero station moments at released ends
+      // Also zero station moments at released ends — only when enforcing
       let stations = finalEnv?.momentStations;
-      if (stations && rel) {
+      if (stations && rel && enforceReleasedZeros) {
         if (rel.relI_mz && stations.length > 0) {
           stations = [...stations];
           stations[0] = 0;
