@@ -873,6 +873,13 @@ export function getFrameResults3D(
   useFEMLoadDistribution?: boolean,
   beamStiffnessFactor: number = 0.35,
   colStiffnessFactor: number = 0.65,
+  /**
+   * عند `true` (الافتراضي) يُصفَّر العزم Mleft/Mright صراحياً عند كل نهاية محرَّرة (R3).
+   * يُستخدم في "جدول الفريمات" لإظهار صفر دقيق.
+   * تُمرَّر `false` للنتائج الخام التي تغذّي تبويبات المقارنة والرسوم البيانية وتبويب
+   * العرض، فتظهر فيها القيم الفعلية من المحلِّل (قد تحتوي بقايا عددية صغيرة).
+   */
+  enforceReleasedZeros: boolean = true,
 ): FrameResult[] {
   const beamsMap = new Map(beams.map(b => [b.id, b]));
   const { beamEnvelope, primaryBeamSplitIds } = runPatternEnvelope3D(
