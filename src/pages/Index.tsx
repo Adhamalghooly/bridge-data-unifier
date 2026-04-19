@@ -940,30 +940,30 @@ const Index = () => {
   }, [beamsWithLoads, getBeamReleaseState]);
 
 
-  // 3D frame results for comparison — MUST be identical to what runAnalysis()
-  // produces for `legacy_3d`. Both `runAnalysis` (line ~631) and this hook used to
-  // call `getFrameResults3D` but with DIFFERENT `connections` arguments
-  // (runAnalysis used [] = conns3DLegacy, here used `autoDetectedConnections`),
-  // which made the "Frames Table" in the main analysis tab show different
-  // moments than the "ETABS Comparison" tab and the "Bridge Internal Forces
-  // Comparison" table for the very same 3D Legacy engine.
+  // 3D frame results for COMPARISON / DIAGRAMS / VIEW tabs.
   //
-  // Source-of-truth rule: the 3D Legacy engine NEVER uses beam-on-beam
-  // connections (تم إلغاء تمييز الجسور الحاملة في 3D Legacy). So we pass `[]`
-  // here too, ensuring all three tables read identical 3D Legacy results.
-  // When `selectedEngine === 'legacy_3d'` we additionally reuse the already
-  // computed `frameResults` to avoid recomputation and guarantee bit-exact
-  // equality across the UI.
+  // Source-of-truth split for the 3D Legacy engine:
+  //   • `frameResults` (يغذّي "جدول الفريمات") — يصفِّر Mleft/Mright صراحياً
+  //     عند كل نهاية محرَّرة R3، بحيث يرى المستخدم "0" دقيقاً.
+  //   • `frameResults3DRaw` (يغذّي "مقارنة ETABS"، "مقارنة القوى الداخلية
+  //     للجسور"، الرسوم البيانية BMD، وتبويب العرض) — يُمرَّر
+  //     `enforceReleasedZeros = false` فلا يُصفَّر شيء، وتظهر القيم الفعلية
+  //     من المحلِّل (قد تكون قيمة سالبة صغيرة من بقايا عددية أو من توزيع
+  //     حقيقي للعزم بالقرب من المفصل — هذا هو السلوك المطلوب).
+  // المحرك 3D Legacy لا يستخدم اتصالات beam-on-beam مطلقاً ⇒ نمرّر [].
   const frameResults3DRaw = useMemo(() => {
     if (!analyzed || frames.length === 0) return [] as FrameResult[];
-    if (selectedEngine === 'legacy_3d') return frameResults;
     try {
       const conns3DLegacy: BeamOnBeamConnection[] = [];
-      return getFrameResults3D(frames, beamsWithLoads, columns, mat, frameEndReleases, conns3DLegacy, slabs, slabProps, false, beamStiffnessFactor, colStiffnessFactor);
+      return getFrameResults3D(
+        frames, beamsWithLoads, columns, mat, frameEndReleases, conns3DLegacy,
+        slabs, slabProps, false, beamStiffnessFactor, colStiffnessFactor,
+        /* enforceReleasedZeros */ false,
+      );
     } catch {
       return [] as FrameResult[];
     }
-  }, [analyzed, selectedEngine, frameResults, frames, beamsWithLoads, columns, mat, frameEndReleases, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor]);
+  }, [analyzed, frames, beamsWithLoads, columns, mat, frameEndReleases, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor]);
 
   // Global Frame results for comparison
   const frameResultsGF = useMemo(() => {
