@@ -873,6 +873,13 @@ export function getFrameResults3D(
   useFEMLoadDistribution?: boolean,
   beamStiffnessFactor: number = 0.35,
   colStiffnessFactor: number = 0.65,
+  /**
+   * عند `true` (الافتراضي) يُصفَّر العزم Mleft/Mright صراحياً عند كل نهاية محرَّرة (R3).
+   * يُستخدم في "جدول الفريمات" لإظهار صفر دقيق.
+   * تُمرَّر `false` للنتائج الخام التي تغذّي تبويبات المقارنة والرسوم البيانية وتبويب
+   * العرض، فتظهر فيها القيم الفعلية من المحلِّل (قد تحتوي بقايا عددية صغيرة).
+   */
+  enforceReleasedZeros: boolean = true,
 ): FrameResult[] {
   const beamsMap = new Map(beams.map(b => [b.id, b]));
   const { beamEnvelope, primaryBeamSplitIds } = runPatternEnvelope3D(
@@ -977,14 +984,14 @@ export function getFrameResults3D(
       const rel = beamReleaseLookup.get(beamId);
       let Mleft  = finalEnv?.momentZI  ?? 0;
       let Mright = finalEnv?.momentZJ  ?? 0;
-      if (rel) {
+      if (rel && enforceReleasedZeros) {
         if (rel.relI_mz) Mleft  = 0;
         if (rel.relJ_mz) Mright = 0;
       }
 
-      // Also zero station moments at released ends
+      // Also zero station moments at released ends — only when enforcing
       let stations = finalEnv?.momentStations;
-      if (stations && rel) {
+      if (stations && rel && enforceReleasedZeros) {
         if (rel.relI_mz && stations.length > 0) {
           stations = [...stations];
           stations[0] = 0;

@@ -58,6 +58,17 @@ export interface AppState {
     nodeI: { ux: boolean; uy: boolean; uz: boolean; rx: boolean; ry: boolean; rz: boolean };
     nodeJ: { ux: boolean; uy: boolean; uz: boolean; rx: boolean; ry: boolean; rz: boolean };
   }>;
+  /**
+   * تحرير نهايات مؤقت يُطبَّق على التحليل فقط.
+   * يُنشأ عند تحرير الجسر من تبويب التحليل/النمذجة (long-press → Element Properties)،
+   * يُدمج مع `frameEndReleases` لكل المحلِّلات، لكنه **لا يظهر** في جدول جسور تبويب
+   * الإدخال ولا يتم حفظه في الـ snapshot/undo. يُمسح عند RESET_TO_DEFAULT أو
+   * CLEAR_TRANSIENT_FRAME_END_RELEASES.
+   */
+  transientFrameEndReleases: Record<string, {
+    nodeI: { ux: boolean; uy: boolean; uz: boolean; rx: boolean; ry: boolean; rz: boolean };
+    nodeJ: { ux: boolean; uy: boolean; uz: boolean; rx: boolean; ry: boolean; rz: boolean };
+  }>;
   selectedEngine: EngineType;
   /**
    * إهمال جساءة البلاطات عند التحليل.
@@ -138,6 +149,8 @@ export type AppAction =
   | { type: 'SET_STORIES'; stories: Story[] }
   | { type: 'SET_SUPPORT_RESTRAINTS'; posKey: string; restraints: { ux: boolean; uy: boolean; uz: boolean; rx: boolean; ry: boolean; rz: boolean } }
   | { type: 'SET_FRAME_END_RELEASES'; posKey: string; nodeIRestraints: { ux: boolean; uy: boolean; uz: boolean; rx: boolean; ry: boolean; rz: boolean }; nodeJRestraints: { ux: boolean; uy: boolean; uz: boolean; rx: boolean; ry: boolean; rz: boolean } }
+  | { type: 'SET_TRANSIENT_FRAME_END_RELEASES'; posKey: string; nodeIRestraints: { ux: boolean; uy: boolean; uz: boolean; rx: boolean; ry: boolean; rz: boolean }; nodeJRestraints: { ux: boolean; uy: boolean; uz: boolean; rx: boolean; ry: boolean; rz: boolean } }
+  | { type: 'CLEAR_TRANSIENT_FRAME_END_RELEASES' }
   | { type: 'LOAD_PROJECT'; data: Partial<AppState> }
   | { type: 'RESET_TO_DEFAULT' }
   | { type: 'SET_ENGINE'; engine: EngineType }
@@ -217,6 +230,7 @@ export const initialState: AppState = {
   savedMessage: '',
   supportRestraints: {},
   frameEndReleases: {},
+  transientFrameEndReleases: {},
   selectedEngine: 'legacy_3d',
   ignoreSlab: false,
   beamStiffnessFactor: 0.35,
@@ -232,6 +246,7 @@ const NON_UNDOABLE_ACTIONS = new Set([
   'INC_MODEL_VERSION', 'SET_ANALYZED', 'SET_FRAME_RESULTS', 'SET_BOB_CONNECTIONS',
   'UNDO', 'SAVE_SNAPSHOT', 'CLEAR_SAVED_MESSAGE', 'SET_MODE', 'SELECT_STORY',
   'LOAD_PROJECT', 'RESET_TO_DEFAULT', 'SET_ENGINE', 'SET_IGNORE_SLAB',
+  'SET_TRANSIENT_FRAME_END_RELEASES', 'CLEAR_TRANSIENT_FRAME_END_RELEASES',
 ]);
 
 function coreReducer(state: AppState, action: AppAction): AppState {
@@ -364,6 +379,11 @@ function coreReducer(state: AppState, action: AppAction): AppState {
       return { ...state, slabPropsOverrides: { ...state.slabPropsOverrides, [action.areaId]: { ...state.slabPropsOverrides[action.areaId], ...action.override } }, analyzed: false };
     case 'SET_FRAME_END_RELEASES':
       return { ...state, frameEndReleases: { ...state.frameEndReleases, [action.posKey]: { nodeI: action.nodeIRestraints, nodeJ: action.nodeJRestraints } }, analyzed: false };
+    case 'SET_TRANSIENT_FRAME_END_RELEASES':
+      // مؤقت: لا يُلمس `frameEndReleases` (جدول الإدخال) ولا يُسبِّب إعادة تحليل تلقائية
+      return { ...state, transientFrameEndReleases: { ...state.transientFrameEndReleases, [action.posKey]: { nodeI: action.nodeIRestraints, nodeJ: action.nodeJRestraints } } };
+    case 'CLEAR_TRANSIENT_FRAME_END_RELEASES':
+      return { ...state, transientFrameEndReleases: {} };
     case 'SET_SUPPORT_RESTRAINTS':
       return { ...state, supportRestraints: { ...state.supportRestraints, [action.posKey]: action.restraints }, analyzed: false };
     case 'SAVE_SNAPSHOT':

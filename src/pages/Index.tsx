@@ -115,10 +115,22 @@ const Index = () => {
     analyzed, frameResults, bobConnections, selectedEngine, ignoreSlab, beamStiffnessFactor, colStiffnessFactor,
     activeTab, mode, activeTool, pendingNode,
     selectedNodeId, selectedFrameId, selectedAreaId,
-    removedColumnIds, removedBeamIds, beamOverrides, colOverrides, slabPropsOverrides, extraBeams, extraColumns, supportRestraints, frameEndReleases,
+    removedColumnIds, removedBeamIds, beamOverrides, colOverrides, slabPropsOverrides, extraBeams, extraColumns, supportRestraints, frameEndReleases, transientFrameEndReleases,
     modalOpen, selectedElement, elemPropsOpen, elemPropsFrameId, elemPropsAreaId,
     diagramOpen, diagramData, savedMessage, bobManualPrimary,
   } = state;
+
+  /**
+   * `frameEndReleases` (الدائم — يأتي من جدول جسور تبويب الإدخال) مدموجاً مع
+   * `transientFrameEndReleases` (المؤقت — يأتي من تحرير الجسر في تبويب التحليل/
+   * النمذجة عبر long-press → Element Properties). هذا هو **المصدر الوحيد**
+   * الذي تقرأ منه كل المحلِّلات (2D/3D Legacy/Global Frame/Unified Core).
+   * المؤقت لا يظهر في جدول جسور تبويب الإدخال ولا يُحفظ في الـ snapshot/undo.
+   */
+  const effectiveFrameEndReleases = React.useMemo(
+    () => ({ ...frameEndReleases, ...transientFrameEndReleases }),
+    [frameEndReleases, transientFrameEndReleases],
+  );
 
   // Main bottom navigation tab
   const [mainTab, setMainTab] = React.useState<MainTab>('inputs');
@@ -538,7 +550,7 @@ const Index = () => {
           const secondaryBeamIdSet = new Set(detectedConnections.flatMap(c => c.secondaryBeamIds));
           const hasBobFrame = frames.some(f => f.beamIds.some(bid => secondaryBeamIdSet.has(bid)));
           if (hasBobFrame) {
-            const results3D = getFrameResults3D(frames, beamsWithLoads, columns, mat, frameEndReleases, detectedConnections, slabs, slabProps, false, beamStiffnessFactor, colStiffnessFactor);
+            const results3D = getFrameResults3D(frames, beamsWithLoads, columns, mat, effectiveFrameEndReleases, detectedConnections, slabs, slabProps, false, beamStiffnessFactor, colStiffnessFactor);
             // دمج: الإطارات التي تحتوي جسوراً محمولة → 3D، الباقي → FEM
             femFrameResults = femFrameResults.map((femRes, idx) => {
               const frame = frames[idx];
@@ -607,13 +619,13 @@ const Index = () => {
       const analysisConnections = autoDetectedConnections;
       try {
         const resultsGF = selectedEngine === 'unified_core'
-          ? getFrameResultsUnifiedCore(frames, beamsWithLoads, columns, mat, frameEndReleases, analysisConnections, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor)
-          : getFrameResultsGlobalFrame(frames, beamsWithLoads, columns, mat, frameEndReleases, analysisConnections, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor);
+          ? getFrameResultsUnifiedCore(frames, beamsWithLoads, columns, mat, effectiveFrameEndReleases, analysisConnections, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor)
+          : getFrameResultsGlobalFrame(frames, beamsWithLoads, columns, mat, effectiveFrameEndReleases, analysisConnections, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor);
         dispatch({ type: 'SET_FRAME_RESULTS', results: resultsGF });
         dispatch({ type: 'SET_BOB_CONNECTIONS', connections: buildAnalyzedConnections(resultsGF, analysisConnections) });
       } catch (err) {
         console.warn('Global Frame analysis failed, falling back to 3D:', err);
-        const results3D = getFrameResults3D(frames, beamsWithLoads, columns, mat, frameEndReleases, analysisConnections, slabs, slabProps, false, beamStiffnessFactor, colStiffnessFactor);
+        const results3D = getFrameResults3D(frames, beamsWithLoads, columns, mat, effectiveFrameEndReleases, analysisConnections, slabs, slabProps, false, beamStiffnessFactor, colStiffnessFactor);
         dispatch({ type: 'SET_FRAME_RESULTS', results: results3D });
         dispatch({ type: 'SET_BOB_CONNECTIONS', connections: buildAnalyzedConnections(results3D, analysisConnections) });
       }
@@ -628,7 +640,7 @@ const Index = () => {
     const conns3DLegacy: BeamOnBeamConnection[] = [];
     const bMap = new Map(beamsWithLoads.map(b => [b.id, b]));
     try {
-      const results3D = getFrameResults3D(frames, beamsWithLoads, columns, mat, frameEndReleases, conns3DLegacy, slabs, slabProps, false, beamStiffnessFactor, colStiffnessFactor);
+      const results3D = getFrameResults3D(frames, beamsWithLoads, columns, mat, effectiveFrameEndReleases, conns3DLegacy, slabs, slabProps, false, beamStiffnessFactor, colStiffnessFactor);
       dispatch({ type: 'SET_FRAME_RESULTS', results: results3D });
       dispatch({ type: 'SET_BOB_CONNECTIONS', connections: [] });
     } catch (err) {
@@ -648,10 +660,26 @@ const Index = () => {
   const getBeamReleaseState = useCallback((beam: Beam): BeamEndReleaseState => {
     const posKey = getBeamReleaseKey(beam);
     const posKeyRev = `${beam.x2.toFixed(3)}_${beam.y2.toFixed(3)}_${beam.x1.toFixed(3)}_${beam.y1.toFixed(3)}`;
-    const rel = frameEndReleases[posKey] || frameEndReleases[posKeyRev];
+    // يقرأ من effective (دائم + مؤقت) ليعكس تحرير تبويب التحليل في الرسوم/المنحنيات
+    const rel = effectiveFrameEndReleases[posKey] || effectiveFrameEndReleases[posKeyRev];
 
     if (!rel) return createEmptyBeamEndReleases();
 
+    const isReversed = !!effectiveFrameEndReleases[posKeyRev] && !effectiveFrameEndReleases[posKey];
+    return isReversed
+      ? { nodeI: { ...rel.nodeJ }, nodeJ: { ...rel.nodeI } }
+      : { nodeI: { ...rel.nodeI }, nodeJ: { ...rel.nodeJ } };
+  }, [effectiveFrameEndReleases, getBeamReleaseKey]);
+
+  /**
+   * مثل `getBeamReleaseState` لكن يقرأ فقط من `frameEndReleases` الدائم
+   * (يُستخدم في جدول جسور تبويب الإدخال + Dialog محرر الإدخال).
+   */
+  const getPersistentBeamReleaseState = useCallback((beam: Beam): BeamEndReleaseState => {
+    const posKey = getBeamReleaseKey(beam);
+    const posKeyRev = `${beam.x2.toFixed(3)}_${beam.y2.toFixed(3)}_${beam.x1.toFixed(3)}_${beam.y1.toFixed(3)}`;
+    const rel = frameEndReleases[posKey] || frameEndReleases[posKeyRev];
+    if (!rel) return createEmptyBeamEndReleases();
     const isReversed = !!frameEndReleases[posKeyRev] && !frameEndReleases[posKey];
     return isReversed
       ? { nodeI: { ...rel.nodeJ }, nodeJ: { ...rel.nodeI } }
@@ -659,9 +687,10 @@ const Index = () => {
   }, [frameEndReleases, getBeamReleaseKey]);
 
   const openBeamReleaseEditor = useCallback((beam: Beam) => {
+    // محرر تبويب الإدخال يقرأ ويكتب على `frameEndReleases` الدائم فقط
     setReleaseEditorBeamId(beam.id);
-    setReleaseEditorData(getBeamReleaseState(beam));
-  }, [getBeamReleaseState]);
+    setReleaseEditorData(getPersistentBeamReleaseState(beam));
+  }, [getPersistentBeamReleaseState]);
 
   const handleReleaseEditorToggle = useCallback((end: 'nodeI' | 'nodeJ', dof: ReleaseDOF, checked: boolean) => {
     setReleaseEditorData(prev => ({
@@ -940,50 +969,50 @@ const Index = () => {
   }, [beamsWithLoads, getBeamReleaseState]);
 
 
-  // 3D frame results for comparison — MUST be identical to what runAnalysis()
-  // produces for `legacy_3d`. Both `runAnalysis` (line ~631) and this hook used to
-  // call `getFrameResults3D` but with DIFFERENT `connections` arguments
-  // (runAnalysis used [] = conns3DLegacy, here used `autoDetectedConnections`),
-  // which made the "Frames Table" in the main analysis tab show different
-  // moments than the "ETABS Comparison" tab and the "Bridge Internal Forces
-  // Comparison" table for the very same 3D Legacy engine.
+  // 3D frame results for COMPARISON / DIAGRAMS / VIEW tabs.
   //
-  // Source-of-truth rule: the 3D Legacy engine NEVER uses beam-on-beam
-  // connections (تم إلغاء تمييز الجسور الحاملة في 3D Legacy). So we pass `[]`
-  // here too, ensuring all three tables read identical 3D Legacy results.
-  // When `selectedEngine === 'legacy_3d'` we additionally reuse the already
-  // computed `frameResults` to avoid recomputation and guarantee bit-exact
-  // equality across the UI.
+  // Source-of-truth split for the 3D Legacy engine:
+  //   • `frameResults` (يغذّي "جدول الفريمات") — يصفِّر Mleft/Mright صراحياً
+  //     عند كل نهاية محرَّرة R3، بحيث يرى المستخدم "0" دقيقاً.
+  //   • `frameResults3DRaw` (يغذّي "مقارنة ETABS"، "مقارنة القوى الداخلية
+  //     للجسور"، الرسوم البيانية BMD، وتبويب العرض) — يُمرَّر
+  //     `enforceReleasedZeros = false` فلا يُصفَّر شيء، وتظهر القيم الفعلية
+  //     من المحلِّل (قد تكون قيمة سالبة صغيرة من بقايا عددية أو من توزيع
+  //     حقيقي للعزم بالقرب من المفصل — هذا هو السلوك المطلوب).
+  // المحرك 3D Legacy لا يستخدم اتصالات beam-on-beam مطلقاً ⇒ نمرّر [].
   const frameResults3DRaw = useMemo(() => {
     if (!analyzed || frames.length === 0) return [] as FrameResult[];
-    if (selectedEngine === 'legacy_3d') return frameResults;
     try {
       const conns3DLegacy: BeamOnBeamConnection[] = [];
-      return getFrameResults3D(frames, beamsWithLoads, columns, mat, frameEndReleases, conns3DLegacy, slabs, slabProps, false, beamStiffnessFactor, colStiffnessFactor);
+      return getFrameResults3D(
+        frames, beamsWithLoads, columns, mat, effectiveFrameEndReleases, conns3DLegacy,
+        slabs, slabProps, false, beamStiffnessFactor, colStiffnessFactor,
+        /* enforceReleasedZeros */ false,
+      );
     } catch {
       return [] as FrameResult[];
     }
-  }, [analyzed, selectedEngine, frameResults, frames, beamsWithLoads, columns, mat, frameEndReleases, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor]);
+  }, [analyzed, frames, beamsWithLoads, columns, mat, effectiveFrameEndReleases, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor]);
 
   // Global Frame results for comparison
   const frameResultsGF = useMemo(() => {
     if (!analyzed || frames.length === 0) return [] as FrameResult[];
     try {
-      return getFrameResultsGlobalFrame(frames, beamsWithLoads, columns, mat, frameEndReleases, autoDetectedConnections, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor);
+      return getFrameResultsGlobalFrame(frames, beamsWithLoads, columns, mat, effectiveFrameEndReleases, autoDetectedConnections, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor);
     } catch {
       return [] as FrameResult[];
     }
-  }, [analyzed, frames, beamsWithLoads, columns, mat, frameEndReleases, autoDetectedConnections, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor]);
+  }, [analyzed, frames, beamsWithLoads, columns, mat, effectiveFrameEndReleases, autoDetectedConnections, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor]);
 
   // Unified Core results for comparison
   const frameResultsUC = useMemo(() => {
     if (!analyzed || frames.length === 0) return [] as FrameResult[];
     try {
-      return getFrameResultsUnifiedCore(frames, beamsWithLoads, columns, mat, frameEndReleases, autoDetectedConnections, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor);
+      return getFrameResultsUnifiedCore(frames, beamsWithLoads, columns, mat, effectiveFrameEndReleases, autoDetectedConnections, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor);
     } catch {
       return [] as FrameResult[];
     }
-  }, [analyzed, frames, beamsWithLoads, columns, mat, frameEndReleases, autoDetectedConnections, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor]);
+  }, [analyzed, frames, beamsWithLoads, columns, mat, effectiveFrameEndReleases, autoDetectedConnections, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor]);
 
   // 2D column loads (kept for comparison/fallback)
   const colLoadsBiaxial = useMemo(() => {
@@ -998,12 +1027,12 @@ const Index = () => {
       // 3D Legacy: نقل أحمال البلاطات إلى الجسور بنفس طريقة محرك 2D
       // (التوزيع الهندسي عبر buildSlabEdgeLoads + computeBeamLoadProfile — نظرية خط الانهيار/المساحة الرافدة)
       // وليس عبر FEM، لضمان تطابق الأحمال المنقولة بين 2D و 3D Legacy.
-      return getColumnLoads3D(frames, beamsWithLoads, columns, mat, frameEndReleases, autoDetectedConnections, slabs, slabProps, false, beamStiffnessFactor, colStiffnessFactor);
+      return getColumnLoads3D(frames, beamsWithLoads, columns, mat, effectiveFrameEndReleases, autoDetectedConnections, slabs, slabProps, false, beamStiffnessFactor, colStiffnessFactor);
     } catch {
       // Fallback to 2D if 3D fails
       return colLoadsBiaxial;
     }
-  }, [analyzed, frames, beamsWithLoads, columns, mat, colLoadsBiaxial, frameEndReleases, autoDetectedConnections, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor]);
+  }, [analyzed, frames, beamsWithLoads, columns, mat, colLoadsBiaxial, effectiveFrameEndReleases, autoDetectedConnections, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor]);
 
   const jointConnectivity = useMemo(() => {
     if (!analyzed) return [] as JointConnectivityInfo[];
@@ -1134,7 +1163,9 @@ const Index = () => {
           const nodeJ = modelManager.getNode(frame.nodeJ);
           if (nodeI && nodeJ) {
             const posKey = `${nodeI.x.toFixed(3)}_${nodeI.y.toFixed(3)}_${nodeJ.x.toFixed(3)}_${nodeJ.y.toFixed(3)}`;
-            dispatch({ type: 'SET_FRAME_END_RELEASES', posKey, nodeIRestraints: data.nodeIRestraints, nodeJRestraints: data.nodeJRestraints });
+            // التحرير من ElementPropertiesDialog (long-press في تبويبات النمذجة/العرض/التحليل)
+            // يُحفظ كـ "مؤقت" — يؤثر على التحليل لكنه لا يظهر في جدول جسور تبويب الإدخال.
+            dispatch({ type: 'SET_TRANSIENT_FRAME_END_RELEASES', posKey, nodeIRestraints: data.nodeIRestraints, nodeJRestraints: data.nodeJRestraints });
           }
         }
       }
@@ -1584,7 +1615,7 @@ const Index = () => {
                     selectedAreaId={selectedAreaId}
                     pendingNode={pendingNode}
                     columnLabels={columnLabels}
-                    frameEndReleases={frameEndReleases}
+                    frameEndReleases={effectiveFrameEndReleases}
                   />
                   <PropertyPanel
                     selectedNode={selectedNodeId ? currentNodes.find(n => n.id === selectedNodeId) : null}
