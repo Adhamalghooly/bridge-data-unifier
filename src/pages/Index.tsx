@@ -660,10 +660,26 @@ const Index = () => {
   const getBeamReleaseState = useCallback((beam: Beam): BeamEndReleaseState => {
     const posKey = getBeamReleaseKey(beam);
     const posKeyRev = `${beam.x2.toFixed(3)}_${beam.y2.toFixed(3)}_${beam.x1.toFixed(3)}_${beam.y1.toFixed(3)}`;
-    const rel = frameEndReleases[posKey] || frameEndReleases[posKeyRev];
+    // يقرأ من effective (دائم + مؤقت) ليعكس تحرير تبويب التحليل في الرسوم/المنحنيات
+    const rel = effectiveFrameEndReleases[posKey] || effectiveFrameEndReleases[posKeyRev];
 
     if (!rel) return createEmptyBeamEndReleases();
 
+    const isReversed = !!effectiveFrameEndReleases[posKeyRev] && !effectiveFrameEndReleases[posKey];
+    return isReversed
+      ? { nodeI: { ...rel.nodeJ }, nodeJ: { ...rel.nodeI } }
+      : { nodeI: { ...rel.nodeI }, nodeJ: { ...rel.nodeJ } };
+  }, [effectiveFrameEndReleases, getBeamReleaseKey]);
+
+  /**
+   * مثل `getBeamReleaseState` لكن يقرأ فقط من `frameEndReleases` الدائم
+   * (يُستخدم في جدول جسور تبويب الإدخال + Dialog محرر الإدخال).
+   */
+  const getPersistentBeamReleaseState = useCallback((beam: Beam): BeamEndReleaseState => {
+    const posKey = getBeamReleaseKey(beam);
+    const posKeyRev = `${beam.x2.toFixed(3)}_${beam.y2.toFixed(3)}_${beam.x1.toFixed(3)}_${beam.y1.toFixed(3)}`;
+    const rel = frameEndReleases[posKey] || frameEndReleases[posKeyRev];
+    if (!rel) return createEmptyBeamEndReleases();
     const isReversed = !!frameEndReleases[posKeyRev] && !frameEndReleases[posKey];
     return isReversed
       ? { nodeI: { ...rel.nodeJ }, nodeJ: { ...rel.nodeI } }
