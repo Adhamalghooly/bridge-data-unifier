@@ -550,7 +550,7 @@ const Index = () => {
           const secondaryBeamIdSet = new Set(detectedConnections.flatMap(c => c.secondaryBeamIds));
           const hasBobFrame = frames.some(f => f.beamIds.some(bid => secondaryBeamIdSet.has(bid)));
           if (hasBobFrame) {
-            const results3D = getFrameResults3D(frames, beamsWithLoads, columns, mat, frameEndReleases, detectedConnections, slabs, slabProps, false, beamStiffnessFactor, colStiffnessFactor);
+            const results3D = getFrameResults3D(frames, beamsWithLoads, columns, mat, effectiveFrameEndReleases, detectedConnections, slabs, slabProps, false, beamStiffnessFactor, colStiffnessFactor);
             // دمج: الإطارات التي تحتوي جسوراً محمولة → 3D، الباقي → FEM
             femFrameResults = femFrameResults.map((femRes, idx) => {
               const frame = frames[idx];
@@ -619,13 +619,13 @@ const Index = () => {
       const analysisConnections = autoDetectedConnections;
       try {
         const resultsGF = selectedEngine === 'unified_core'
-          ? getFrameResultsUnifiedCore(frames, beamsWithLoads, columns, mat, frameEndReleases, analysisConnections, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor)
-          : getFrameResultsGlobalFrame(frames, beamsWithLoads, columns, mat, frameEndReleases, analysisConnections, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor);
+          ? getFrameResultsUnifiedCore(frames, beamsWithLoads, columns, mat, effectiveFrameEndReleases, analysisConnections, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor)
+          : getFrameResultsGlobalFrame(frames, beamsWithLoads, columns, mat, effectiveFrameEndReleases, analysisConnections, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor);
         dispatch({ type: 'SET_FRAME_RESULTS', results: resultsGF });
         dispatch({ type: 'SET_BOB_CONNECTIONS', connections: buildAnalyzedConnections(resultsGF, analysisConnections) });
       } catch (err) {
         console.warn('Global Frame analysis failed, falling back to 3D:', err);
-        const results3D = getFrameResults3D(frames, beamsWithLoads, columns, mat, frameEndReleases, analysisConnections, slabs, slabProps, false, beamStiffnessFactor, colStiffnessFactor);
+        const results3D = getFrameResults3D(frames, beamsWithLoads, columns, mat, effectiveFrameEndReleases, analysisConnections, slabs, slabProps, false, beamStiffnessFactor, colStiffnessFactor);
         dispatch({ type: 'SET_FRAME_RESULTS', results: results3D });
         dispatch({ type: 'SET_BOB_CONNECTIONS', connections: buildAnalyzedConnections(results3D, analysisConnections) });
       }
@@ -640,7 +640,7 @@ const Index = () => {
     const conns3DLegacy: BeamOnBeamConnection[] = [];
     const bMap = new Map(beamsWithLoads.map(b => [b.id, b]));
     try {
-      const results3D = getFrameResults3D(frames, beamsWithLoads, columns, mat, frameEndReleases, conns3DLegacy, slabs, slabProps, false, beamStiffnessFactor, colStiffnessFactor);
+      const results3D = getFrameResults3D(frames, beamsWithLoads, columns, mat, effectiveFrameEndReleases, conns3DLegacy, slabs, slabProps, false, beamStiffnessFactor, colStiffnessFactor);
       dispatch({ type: 'SET_FRAME_RESULTS', results: results3D });
       dispatch({ type: 'SET_BOB_CONNECTIONS', connections: [] });
     } catch (err) {
@@ -985,34 +985,34 @@ const Index = () => {
     try {
       const conns3DLegacy: BeamOnBeamConnection[] = [];
       return getFrameResults3D(
-        frames, beamsWithLoads, columns, mat, frameEndReleases, conns3DLegacy,
+        frames, beamsWithLoads, columns, mat, effectiveFrameEndReleases, conns3DLegacy,
         slabs, slabProps, false, beamStiffnessFactor, colStiffnessFactor,
         /* enforceReleasedZeros */ false,
       );
     } catch {
       return [] as FrameResult[];
     }
-  }, [analyzed, frames, beamsWithLoads, columns, mat, frameEndReleases, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor]);
+  }, [analyzed, frames, beamsWithLoads, columns, mat, effectiveFrameEndReleases, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor]);
 
   // Global Frame results for comparison
   const frameResultsGF = useMemo(() => {
     if (!analyzed || frames.length === 0) return [] as FrameResult[];
     try {
-      return getFrameResultsGlobalFrame(frames, beamsWithLoads, columns, mat, frameEndReleases, autoDetectedConnections, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor);
+      return getFrameResultsGlobalFrame(frames, beamsWithLoads, columns, mat, effectiveFrameEndReleases, autoDetectedConnections, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor);
     } catch {
       return [] as FrameResult[];
     }
-  }, [analyzed, frames, beamsWithLoads, columns, mat, frameEndReleases, autoDetectedConnections, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor]);
+  }, [analyzed, frames, beamsWithLoads, columns, mat, effectiveFrameEndReleases, autoDetectedConnections, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor]);
 
   // Unified Core results for comparison
   const frameResultsUC = useMemo(() => {
     if (!analyzed || frames.length === 0) return [] as FrameResult[];
     try {
-      return getFrameResultsUnifiedCore(frames, beamsWithLoads, columns, mat, frameEndReleases, autoDetectedConnections, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor);
+      return getFrameResultsUnifiedCore(frames, beamsWithLoads, columns, mat, effectiveFrameEndReleases, autoDetectedConnections, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor);
     } catch {
       return [] as FrameResult[];
     }
-  }, [analyzed, frames, beamsWithLoads, columns, mat, frameEndReleases, autoDetectedConnections, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor]);
+  }, [analyzed, frames, beamsWithLoads, columns, mat, effectiveFrameEndReleases, autoDetectedConnections, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor]);
 
   // 2D column loads (kept for comparison/fallback)
   const colLoadsBiaxial = useMemo(() => {
@@ -1027,12 +1027,12 @@ const Index = () => {
       // 3D Legacy: نقل أحمال البلاطات إلى الجسور بنفس طريقة محرك 2D
       // (التوزيع الهندسي عبر buildSlabEdgeLoads + computeBeamLoadProfile — نظرية خط الانهيار/المساحة الرافدة)
       // وليس عبر FEM، لضمان تطابق الأحمال المنقولة بين 2D و 3D Legacy.
-      return getColumnLoads3D(frames, beamsWithLoads, columns, mat, frameEndReleases, autoDetectedConnections, slabs, slabProps, false, beamStiffnessFactor, colStiffnessFactor);
+      return getColumnLoads3D(frames, beamsWithLoads, columns, mat, effectiveFrameEndReleases, autoDetectedConnections, slabs, slabProps, false, beamStiffnessFactor, colStiffnessFactor);
     } catch {
       // Fallback to 2D if 3D fails
       return colLoadsBiaxial;
     }
-  }, [analyzed, frames, beamsWithLoads, columns, mat, colLoadsBiaxial, frameEndReleases, autoDetectedConnections, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor]);
+  }, [analyzed, frames, beamsWithLoads, columns, mat, colLoadsBiaxial, effectiveFrameEndReleases, autoDetectedConnections, slabs, slabProps, beamStiffnessFactor, colStiffnessFactor]);
 
   const jointConnectivity = useMemo(() => {
     if (!analyzed) return [] as JointConnectivityInfo[];
@@ -1613,7 +1613,7 @@ const Index = () => {
                     selectedAreaId={selectedAreaId}
                     pendingNode={pendingNode}
                     columnLabels={columnLabels}
-                    frameEndReleases={frameEndReleases}
+                    effectiveFrameEndReleases={effectiveFrameEndReleases}
                   />
                   <PropertyPanel
                     selectedNode={selectedNodeId ? currentNodes.find(n => n.id === selectedNodeId) : null}
