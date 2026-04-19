@@ -115,10 +115,22 @@ const Index = () => {
     analyzed, frameResults, bobConnections, selectedEngine, ignoreSlab, beamStiffnessFactor, colStiffnessFactor,
     activeTab, mode, activeTool, pendingNode,
     selectedNodeId, selectedFrameId, selectedAreaId,
-    removedColumnIds, removedBeamIds, beamOverrides, colOverrides, slabPropsOverrides, extraBeams, extraColumns, supportRestraints, frameEndReleases,
+    removedColumnIds, removedBeamIds, beamOverrides, colOverrides, slabPropsOverrides, extraBeams, extraColumns, supportRestraints, frameEndReleases, transientFrameEndReleases,
     modalOpen, selectedElement, elemPropsOpen, elemPropsFrameId, elemPropsAreaId,
     diagramOpen, diagramData, savedMessage, bobManualPrimary,
   } = state;
+
+  /**
+   * `frameEndReleases` (الدائم — يأتي من جدول جسور تبويب الإدخال) مدموجاً مع
+   * `transientFrameEndReleases` (المؤقت — يأتي من تحرير الجسر في تبويب التحليل/
+   * النمذجة عبر long-press → Element Properties). هذا هو **المصدر الوحيد**
+   * الذي تقرأ منه كل المحلِّلات (2D/3D Legacy/Global Frame/Unified Core).
+   * المؤقت لا يظهر في جدول جسور تبويب الإدخال ولا يُحفظ في الـ snapshot/undo.
+   */
+  const effectiveFrameEndReleases = React.useMemo(
+    () => ({ ...frameEndReleases, ...transientFrameEndReleases }),
+    [frameEndReleases, transientFrameEndReleases],
+  );
 
   // Main bottom navigation tab
   const [mainTab, setMainTab] = React.useState<MainTab>('inputs');
