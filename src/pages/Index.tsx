@@ -687,9 +687,10 @@ const Index = () => {
   }, [frameEndReleases, getBeamReleaseKey]);
 
   const openBeamReleaseEditor = useCallback((beam: Beam) => {
+    // محرر تبويب الإدخال يقرأ ويكتب على `frameEndReleases` الدائم فقط
     setReleaseEditorBeamId(beam.id);
-    setReleaseEditorData(getBeamReleaseState(beam));
-  }, [getBeamReleaseState]);
+    setReleaseEditorData(getPersistentBeamReleaseState(beam));
+  }, [getPersistentBeamReleaseState]);
 
   const handleReleaseEditorToggle = useCallback((end: 'nodeI' | 'nodeJ', dof: ReleaseDOF, checked: boolean) => {
     setReleaseEditorData(prev => ({
