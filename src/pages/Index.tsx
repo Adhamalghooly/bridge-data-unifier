@@ -1163,7 +1163,9 @@ const Index = () => {
           const nodeJ = modelManager.getNode(frame.nodeJ);
           if (nodeI && nodeJ) {
             const posKey = `${nodeI.x.toFixed(3)}_${nodeI.y.toFixed(3)}_${nodeJ.x.toFixed(3)}_${nodeJ.y.toFixed(3)}`;
-            dispatch({ type: 'SET_FRAME_END_RELEASES', posKey, nodeIRestraints: data.nodeIRestraints, nodeJRestraints: data.nodeJRestraints });
+            // التحرير من ElementPropertiesDialog (long-press في تبويبات النمذجة/العرض/التحليل)
+            // يُحفظ كـ "مؤقت" — يؤثر على التحليل لكنه لا يظهر في جدول جسور تبويب الإدخال.
+            dispatch({ type: 'SET_TRANSIENT_FRAME_END_RELEASES', posKey, nodeIRestraints: data.nodeIRestraints, nodeJRestraints: data.nodeJRestraints });
           }
         }
       }
