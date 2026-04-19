@@ -1613,7 +1613,7 @@ const Index = () => {
                     selectedAreaId={selectedAreaId}
                     pendingNode={pendingNode}
                     columnLabels={columnLabels}
-                    effectiveFrameEndReleases={effectiveFrameEndReleases}
+                    frameEndReleases={effectiveFrameEndReleases}
                   />
                   <PropertyPanel
                     selectedNode={selectedNodeId ? currentNodes.find(n => n.id === selectedNodeId) : null}
